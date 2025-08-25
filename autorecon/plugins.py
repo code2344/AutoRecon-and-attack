@@ -220,6 +220,184 @@ class Report(Plugin):
 	def __init__(self):
 		super().__init__()
 
+class ExploitScan(Plugin):
+	"""Plugin for vulnerability exploitation and active attack capabilities."""
+
+	def __init__(self):
+		super().__init__()
+		self.ports = {'tcp':[], 'udp':[]}
+		self.ignore_ports = {'tcp':[], 'udp':[]}
+		self.services = []
+		self.service_names = []
+		self.ignore_service_names = []
+		self.vulnerabilities = []  # List of vulnerabilities this plugin can exploit
+		self.risk_level = 'medium'  # low, medium, high, critical
+		self.requires_confirmation = True  # Require explicit confirmation before running
+		self.max_target_instances = 1
+		self.max_global_instances = 1
+
+	async def run(self, service):
+		"""Execute the exploit against the target service."""
+		raise NotImplementedError
+
+	@final
+	def match_service(self, protocol, port, name, negative_match=False):
+		protocol = protocol.lower()
+		if protocol not in ['tcp', 'udp']:
+			print('Invalid protocol.')
+			sys.exit(1)
+
+		if not isinstance(port, list):
+			port = [port]
+
+		port = list(map(int, port))
+
+		if not isinstance(name, list):
+			name = [name]
+
+		valid_regex = True
+		for r in name:
+			try:
+				re.compile(r)
+			except re.error:
+				print('Invalid regex: ' + r)
+				valid_regex = False
+
+		if not valid_regex:
+			sys.exit(1)
+
+		service = {'protocol': protocol, 'port': port, 'name': name, 'negative_match': negative_match}
+		self.services.append(service)
+
+	@final
+	def match_service_name(self, name, negative_match=False):
+		if not isinstance(name, list):
+			name = [name]
+
+		valid_regex = True
+		for r in name:
+			try:
+				re.compile(r)
+			except re.error:
+				print('Invalid regex: ' + r)
+				valid_regex = False
+
+		if valid_regex:
+			if negative_match:
+				self.ignore_service_names = list(set(self.ignore_service_names + name))
+			else:
+				self.service_names = list(set(self.service_names + name))
+		else:
+			sys.exit(1)
+
+	@final
+	def add_vulnerability(self, cve_id, description):
+		"""Add a vulnerability that this exploit plugin can target."""
+		self.vulnerabilities.append({'cve': cve_id, 'description': description})
+
+class AttackScan(Plugin):
+	"""Plugin for active attack capabilities like web attacks, brute forcing, etc."""
+
+	def __init__(self):
+		super().__init__()
+		self.ports = {'tcp':[], 'udp':[]}
+		self.ignore_ports = {'tcp':[], 'udp':[]}
+		self.services = []
+		self.service_names = []
+		self.ignore_service_names = []
+		self.attack_type = 'unknown'  # web, bruteforce, injection, etc.
+		self.risk_level = 'medium'  # low, medium, high, critical
+		self.requires_confirmation = True  # Require explicit confirmation before running
+		self.max_target_instances = 1
+		self.max_global_instances = 1
+
+	async def run(self, service):
+		"""Execute the attack against the target service."""
+		raise NotImplementedError
+
+	@final
+	def match_service(self, protocol, port, name, negative_match=False):
+		protocol = protocol.lower()
+		if protocol not in ['tcp', 'udp']:
+			print('Invalid protocol.')
+			sys.exit(1)
+
+		if not isinstance(port, list):
+			port = [port]
+
+		port = list(map(int, port))
+
+		if not isinstance(name, list):
+			name = [name]
+
+		valid_regex = True
+		for r in name:
+			try:
+				re.compile(r)
+			except re.error:
+				print('Invalid regex: ' + r)
+				valid_regex = False
+
+		if not valid_regex:
+			sys.exit(1)
+
+		service = {'protocol': protocol, 'port': port, 'name': name, 'negative_match': negative_match}
+		self.services.append(service)
+
+	@final
+	def match_service_name(self, name, negative_match=False):
+		if not isinstance(name, list):
+			name = [name]
+
+		valid_regex = True
+		for r in name:
+			try:
+				re.compile(r)
+			except re.error:
+				print('Invalid regex: ' + r)
+				valid_regex = False
+
+		if valid_regex:
+			if negative_match:
+				self.ignore_service_names = list(set(self.ignore_service_names + name))
+			else:
+				self.service_names = list(set(self.service_names + name))
+		else:
+			sys.exit(1)
+
+class PostExploit(Plugin):
+	"""Plugin for post-exploitation activities like privilege escalation, persistence, etc."""
+
+	def __init__(self):
+		super().__init__()
+		self.activity_type = 'unknown'  # privesc, persistence, exfiltration, etc.
+		self.operating_system = 'any'  # windows, linux, any
+		self.risk_level = 'high'  # Post-exploitation is inherently high risk
+		self.requires_confirmation = True
+		self.requires_shell = True  # Requires an existing shell/access
+		self.max_target_instances = 1
+		self.max_global_instances = 1
+
+	async def run(self, target, session_info=None):
+		"""Execute the post-exploitation activity."""
+		raise NotImplementedError
+
+class EmailScan(Plugin):
+	"""Plugin for email-based attacks like phishing, spear-phishing, etc."""
+
+	def __init__(self):
+		super().__init__()
+		self.email_type = 'unknown'  # phishing, spear_phishing, email_enum
+		self.risk_level = 'high'  # Email attacks are high risk
+		self.requires_confirmation = True
+		self.requires_target_emails = False  # Whether specific email addresses are needed
+		self.max_target_instances = 1
+		self.max_global_instances = 1
+
+	async def run(self, target, email_list=None):
+		"""Execute the email-based attack."""
+		raise NotImplementedError
+
 class AutoRecon(object):
 
 	def __init__(self):
@@ -228,9 +406,13 @@ class AutoRecon(object):
 		self.completed_targets = []
 		self.plugins = {}
 		self.__slug_regex = re.compile('^[a-z0-9\-]+$')
-		self.plugin_types = {'port':[], 'service':[], 'report':[]}
+		self.plugin_types = {'port':[], 'service':[], 'report':[], 'exploit':[], 'attack':[], 'postexploit':[], 'email':[]}
 		self.port_scan_semaphore = None
 		self.service_scan_semaphore = None
+		self.exploit_scan_semaphore = None
+		self.attack_scan_semaphore = None
+		self.postexploit_semaphore = None
+		self.email_scan_semaphore = None
 		self.argparse = None
 		self.argparse_group = None
 		self.args = None
@@ -243,6 +425,7 @@ class AutoRecon(object):
 		self.lock = asyncio.Lock()
 		self.load_slug = None
 		self.load_module = None
+		self.attack_mode = False  # Flag to enable attack capabilities
 
 	def add_argument(self, plugin, name, **kwargs):
 		# TODO: make sure name is simple.
@@ -318,8 +501,13 @@ class AutoRecon(object):
 				if member_name == 'configure':
 					configure_function_found = True
 				elif member_name == 'run' and inspect.iscoroutinefunction(member_value):
-					if len(inspect.getfullargspec(member_value).args) != 2:
-						fail('Error: the "run" coroutine in the plugin "' + plugin.name + '" in ' + filename + ' should have two arguments.', file=sys.stderr)
+					# Different plugin types have different run method signatures
+					expected_args = 2  # Default for PortScan and ServiceScan
+					if issubclass(plugin.__class__, (PostExploit, EmailScan)):
+						expected_args = 3  # target, session_info/email_list
+					
+					if len(inspect.getfullargspec(member_value).args) != expected_args:
+						fail('Error: the "run" coroutine in the plugin "' + plugin.name + '" in ' + filename + f' should have {expected_args} arguments.', file=sys.stderr)
 					run_coroutine_found = True
 				elif member_name == 'manual':
 					if len(inspect.getfullargspec(member_value).args) != 3:
@@ -341,8 +529,16 @@ class AutoRecon(object):
 				self.plugin_types["service"].append(plugin)
 			elif issubclass(plugin.__class__, Report):
 				self.plugin_types["report"].append(plugin)
+			elif issubclass(plugin.__class__, ExploitScan):
+				self.plugin_types["exploit"].append(plugin)
+			elif issubclass(plugin.__class__, AttackScan):
+				self.plugin_types["attack"].append(plugin)
+			elif issubclass(plugin.__class__, PostExploit):
+				self.plugin_types["postexploit"].append(plugin)
+			elif issubclass(plugin.__class__, EmailScan):
+				self.plugin_types["email"].append(plugin)
 			else:
-				fail('Plugin "' + plugin.name + '" in ' + filename + ' is neither a PortScan, ServiceScan, nor a Report.', file=sys.stderr)
+				fail('Plugin "' + plugin.name + '" in ' + filename + ' is not a recognized plugin type.', file=sys.stderr)
 
 			plugin.tags = [tag.lower() for tag in plugin.tags]
 

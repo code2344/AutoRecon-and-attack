@@ -16,6 +16,11 @@ AutoRecon was inspired by three tools which the author used during the OSCP labs
 
 ## Features
 
+* **🤖 AI-Powered Interactive Terminal Mode**: Control the entire penetration testing process using natural language commands
+* **🎯 Smart Confirmation System**: AI automatically detects and confirms dangerous actions before execution
+* **📋 Comprehensive Scope Management**: Support for JSON and plain text scope files for organized testing
+* **🚀 GitHub Actions Integration**: Execute single AI commands for automated CI/CD security testing
+* **📊 Intelligent Reporting**: AI-generated comprehensive reports with executive summaries and technical details
 * Supports multiple targets in the form of IP addresses, IP ranges (CIDR notation), and resolvable hostnames. IPv6 is also supported.
 * Can scan multiple targets concurrently, utilizing multiple processors if they are available.
 * Advanced plugin system allowing for easy creation of new scans.
@@ -48,6 +53,81 @@ AutoRecon requires the usage of Python 3.8+ and pip, which can be installed on K
 ```bash
 sudo apt install python3
 sudo apt install python3-pip
+```
+
+## 🤖 AI-Powered Interactive Mode (NEW!)
+
+AutoRecon now features an revolutionary **Interactive AI Terminal Mode** that transforms penetration testing into a conversational experience. Control the entire process using natural language commands through a terminal-within-a-terminal interface.
+
+### Quick Start with AI
+
+1. **Install Ollama** (for local AI processing):
+```bash
+# Install Ollama
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# Start Ollama service
+ollama serve &
+
+# Pull AI model
+ollama pull llama3.1
+```
+
+2. **Start Interactive Mode**:
+```bash
+# Basic interactive terminal
+autorecon --enable-ai --interactive-terminal
+
+# With scope file for organized testing
+autorecon --enable-ai --interactive-terminal --scope-file scope.json
+```
+
+3. **Use Natural Language Commands**:
+```
+> get me info on John Smith who lives in Seattle
+> research example.com for vulnerabilities  
+> I want to spearphish employees at TechCorp
+> confirm attack 192.168.1.1 with metasploit
+> generate comprehensive security report
+> exit
+```
+
+### AI Features
+
+- **🗣️ Natural Language Interface**: Give commands in plain English
+- **⚠️ Smart Confirmation**: AI detects dangerous actions and asks for confirmation
+- **🎯 Pre-confirmed Actions**: Skip confirmation with `confirm attack example.com`
+- **📊 Auto-reporting**: Comprehensive reports generated automatically
+- **🚀 GitHub Actions**: Single command execution for CI/CD integration
+
+### Example Interactive Session
+
+```bash
+$ autorecon --enable-ai --interactive-terminal
+
+🤖 AutoRecon AI Interactive Terminal Mode
+> research example.com for social engineering targets
+
+✅ OSINT completed successfully
+Key outputs:
+  target_profiles: Executive team profiles identified
+  social_networks: LinkedIn and Twitter accounts found
+
+> confirm generate phishing campaign for IT department
+
+✅ Social engineering completed successfully
+Generated files:
+  📁 phishing_templates_20241201_143022.json
+  📁 campaign_strategy_20241201_143022.md
+
+> exit
+
+🎯 Generating final comprehensive report...
+✅ Final report generated successfully!
+📁 Report: autorecon_ai_reports/autorecon_ai_report_20241201_143525.md
+```
+
+For complete AI documentation, see [AI_CAPABILITIES.md](AI_CAPABILITIES.md).
 ```
 
 ### Supporting Packages
