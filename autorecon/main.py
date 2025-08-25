@@ -14,7 +14,7 @@ colorama.init()
 
 from autorecon.config import config, configurable_keys, configurable_boolean_keys
 from autorecon.io import slugify, e, fformat, cprint, debug, info, warn, error, fail, CommandStreamReader
-from autorecon.plugins import Pattern, PortScan, ServiceScan, Report, AutoRecon
+from autorecon.plugins import Pattern, PortScan, ServiceScan, Report, ExploitScan, AttackScan, PostExploit, EmailScan, AutoRecon
 from autorecon.targets import Target, Service
 
 VERSION = "2.0.36"
@@ -904,6 +904,11 @@ async def run():
 	parser.add_argument('-mpti', '--max-plugin-target-instances', action='store', nargs='+', metavar='PLUGIN:NUMBER', help='A space separated list of plugin slugs with the max number of instances (per target) in the following style: nmap-http:2 dirbuster:1. Default: %(default)s')
 	parser.add_argument('-mpgi', '--max-plugin-global-instances', action='store', nargs='+', metavar='PLUGIN:NUMBER', help='A space separated list of plugin slugs with the max number of global instances in the following style: nmap-http:2 dirbuster:1. Default: %(default)s')
 	parser.add_argument('--accessible', action='store_true', help='Attempts to make AutoRecon output more accessible to screenreaders. Default: %(default)s')
+	parser.add_argument('--enable-attack-mode', action='store_true', help='Enable attack capabilities. WARNING: This will execute potentially dangerous offensive tools. Use only on authorized targets. Default: %(default)s')
+	parser.add_argument('--exploit-scans', action='store', type=str, metavar='PLUGINS', help='Override --tags / --exclude-tags for the listed ExploitScan plugins (comma separated). Only works with --enable-attack-mode. Default: %(default)s')
+	parser.add_argument('--attack-scans', action='store', type=str, metavar='PLUGINS', help='Override --tags / --exclude-tags for the listed AttackScan plugins (comma separated). Only works with --enable-attack-mode. Default: %(default)s')
+	parser.add_argument('--postexploit-scans', action='store', type=str, metavar='PLUGINS', help='Override --tags / --exclude-tags for the listed PostExploit plugins (comma separated). Only works with --enable-attack-mode. Default: %(default)s')
+	parser.add_argument('--email-scans', action='store', type=str, metavar='PLUGINS', help='Override --tags / --exclude-tags for the listed EmailScan plugins (comma separated). Only works with --enable-attack-mode. Default: %(default)s')
 	parser.add_argument('-v', '--verbose', action='count', help='Enable verbose output. Repeat for more verbosity.')
 	parser.add_argument('--version', action='store_true', help='Prints the AutoRecon version and exits.')
 	parser.error = lambda s: fail(s[0].upper() + s[1:])
@@ -968,9 +973,30 @@ async def run():
 		unknown_help()
 		fail('Error: Specified additional plugins directory "' + config['add_plugins_dir'] + '" does not exist.')
 
+	# Handle attack mode
+	if args.enable_attack_mode:
+		autorecon.attack_mode = True
+		warn('WARNING: Attack mode is enabled. This will execute potentially dangerous offensive tools.')
+		warn('WARNING: Only use this on systems you own or have explicit permission to test.')
+		
+		# Add attack plugins directory if attack mode is enabled
+		attack_plugins_dir = os.path.join(os.path.dirname(__file__), 'attack-plugins')
+		if os.path.isdir(attack_plugins_dir):
+			if config['add_plugins_dir']:
+				config['add_plugins_dir'] = config['add_plugins_dir'] + ',' + attack_plugins_dir
+			else:
+				config['add_plugins_dir'] = attack_plugins_dir
+			info('Attack plugins directory added: ' + attack_plugins_dir)
+		else:
+			warn('Attack plugins directory not found: ' + attack_plugins_dir)
+
 	plugins_dirs = [config['plugins_dir']]
 	if config['add_plugins_dir']:
-		plugins_dirs.append(config['add_plugins_dir'])
+		# Support multiple additional plugin directories separated by commas
+		for add_dir in config['add_plugins_dir'].split(','):
+			add_dir = add_dir.strip()
+			if add_dir and os.path.isdir(add_dir):
+				plugins_dirs.append(add_dir)
 
 	for plugins_dir in plugins_dirs:
 		for plugin_file in sorted(os.listdir(plugins_dir)):
@@ -994,11 +1020,11 @@ async def run():
 							print('Plugin "' + c.__name__ + '" in ' + filename + ' is using a protected class name. Please change it.')
 							sys.exit(1)
 
-						# Only add classes that are a sub class of either PortScan, ServiceScan, or Report
-						if issubclass(c, PortScan) or issubclass(c, ServiceScan) or issubclass(c, Report):
+						# Only add classes that are a sub class of supported plugin types
+						if issubclass(c, PortScan) or issubclass(c, ServiceScan) or issubclass(c, Report) or issubclass(c, ExploitScan) or issubclass(c, AttackScan) or issubclass(c, PostExploit) or issubclass(c, EmailScan):
 							autorecon.register(c(), filename)
 						else:
-							print('Plugin "' + c.__name__ + '" in ' + filename + ' is not a subclass of either PortScan, ServiceScan, or Report.')
+							print('Plugin "' + c.__name__ + '" in ' + filename + ' is not a recognized plugin type.')
 				except (ImportError, SyntaxError) as ex:
 					unknown_help()
 					print('cannot import ' + filename + ' plugin')
@@ -1020,6 +1046,10 @@ async def run():
 	autorecon.plugin_types['port'].sort(key=lambda x: x.priority)
 	autorecon.plugin_types['service'].sort(key=lambda x: x.priority)
 	autorecon.plugin_types['report'].sort(key=lambda x: x.priority)
+	autorecon.plugin_types['exploit'].sort(key=lambda x: x.priority)
+	autorecon.plugin_types['attack'].sort(key=lambda x: x.priority)
+	autorecon.plugin_types['postexploit'].sort(key=lambda x: x.priority)
+	autorecon.plugin_types['email'].sort(key=lambda x: x.priority)
 
 	if not config['global_file']:
 		unknown_help()
@@ -1166,6 +1196,18 @@ async def run():
 		if type in ['plugin', 'plugins', 'report', 'reports', 'reporting']:
 			for p in autorecon.plugin_types['report']:
 				print('Report: ' + p.name + ' (' + p.slug + ')' + (' - ' + p.description if p.description else ''))
+		if type in ['plugin', 'plugins', 'exploit', 'exploits', 'exploitscan', 'exploitscans']:
+			for p in autorecon.plugin_types['exploit']:
+				print('ExploitScan: ' + p.name + ' (' + p.slug + ')' + (' - ' + p.description if p.description else ''))
+		if type in ['plugin', 'plugins', 'attack', 'attacks', 'attackscan', 'attackscans']:
+			for p in autorecon.plugin_types['attack']:
+				print('AttackScan: ' + p.name + ' (' + p.slug + ')' + (' - ' + p.description if p.description else ''))
+		if type in ['plugin', 'plugins', 'postexploit', 'postexploits', 'postexploitation']:
+			for p in autorecon.plugin_types['postexploit']:
+				print('PostExploit: ' + p.name + ' (' + p.slug + ')' + (' - ' + p.description if p.description else ''))
+		if type in ['plugin', 'plugins', 'email', 'emails', 'emailscan', 'emailscans']:
+			for p in autorecon.plugin_types['email']:
+				print('EmailScan: ' + p.name + ' (' + p.slug + ')' + (' - ' + p.description if p.description else ''))
 
 		sys.exit(0)
 
