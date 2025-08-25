@@ -2,3 +2,6 @@ __pycache__
 *.pyc
 results/
 poetry.*
+autorecon_ai_reports/
+demo_scope.json
+*.log

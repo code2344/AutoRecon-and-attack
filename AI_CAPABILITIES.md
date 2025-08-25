@@ -26,8 +26,14 @@ pip install -r requirements.txt
 ### Basic AI Usage
 
 ```bash
+# Interactive AI Terminal Mode (NEW!)
+autorecon --enable-ai --interactive-terminal
+
 # Natural language OSINT
 autorecon --enable-ai --ai-request "get me info on John Smith who lives in Seattle" target.com
+
+# Single command execution (GitHub Actions)
+autorecon --enable-ai --single-command --initial-prompt "research example.com for vulnerabilities"
 
 # AI-powered phishing campaign
 autorecon --enable-attack-mode --enable-ai --email-scans phishing-campaign \
@@ -36,6 +42,57 @@ autorecon --enable-attack-mode --enable-ai --email-scans phishing-campaign \
 # Full AI orchestration with interactive guidance
 autorecon --enable-attack-mode --enable-ai --interactive-ai \
   --auto-exploit --generate-payloads target.com
+```
+
+## 🎯 Interactive AI Terminal Mode (NEW!)
+
+The revolutionary **Interactive Terminal Mode** provides a terminal-within-a-terminal interface where you control the entire penetration testing process using natural language commands.
+
+### Quick Start
+```bash
+# Start interactive mode
+autorecon --enable-ai --interactive-terminal
+
+# With scope file and initial prompt
+autorecon --enable-ai --interactive-terminal --scope-file scope.json \
+  --initial-prompt "research all targets for social engineering"
+```
+
+### Natural Language Interface
+```
+> get me info on John Smith who lives in Seattle
+> I want to spearphish employees at TechCorp  
+> confirm attack example.com with metasploit reverse shells
+> generate phishing templates for IT department
+> scan 192.168.1.0/24 for vulnerabilities
+> create comprehensive report
+> exit
+```
+
+### Smart Confirmation System
+- **Automatic Detection**: Recognizes dangerous actions (attacks, file creation, high-risk operations)
+- **Risk Assessment**: Shows impact, targets, and detailed analysis
+- **Skip Confirmation**: Prefix with `confirm` to bypass (e.g., `confirm attack example.com`)
+- **Detailed Analysis**: Type `details` during confirmation for full impact assessment
+
+### Comprehensive Reporting
+Every session automatically generates:
+- **Markdown Report**: Professional penetration testing report
+- **Session Data**: Complete findings and analysis
+- **Conversation Log**: Full interaction history
+
+### GitHub Actions Integration
+Execute single AI commands for automation:
+```yaml
+- name: Run AutoRecon AI
+  uses: ./.github/workflows/autorecon-ai.yml
+  with:
+    ai_prompt: "research example.com and generate attack plan"
+    scope_file_content: |
+      {
+        "targets": ["example.com", "demo.com"],
+        "test_type": "External penetration test"
+      }
 ```
 
 ## 🧠 AI Capabilities Overview

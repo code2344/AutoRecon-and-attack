@@ -515,7 +515,7 @@ async def scan_target(target):
 		forced_services = [x.strip().lower() for x in config['force_services']]
 
 		for forced_service in forced_services:
-			match = re.search('(?P<protocol>(tcp|udp))\/(?P<port>\d+)\/(?P<service>[\w\-]+)(\/(?P<secure>secure|insecure))?', forced_service)
+			match = re.search(r'(?P<protocol>(tcp|udp))\/(?P<port>\d+)\/(?P<service>[\w\-]+)(\/(?P<secure>secure|insecure))?', forced_service)
 			if match:
 				protocol = match.group('protocol')
 				if config['proxychains'] and protocol == 'udp':
@@ -920,6 +920,11 @@ async def run():
 	parser.add_argument('--interactive-ai', action='store_true', help='Enable interactive AI mode for guided penetration testing')
 	parser.add_argument('--auto-exploit', action='store_true', help='Automatically execute AI-suggested exploits (requires --enable-attack-mode)')
 	parser.add_argument('--generate-payloads', action='store_true', help='Use AI to generate custom payloads and exploits')
+	# Interactive AI Mode
+	parser.add_argument('--interactive-terminal', action='store_true', help='Start interactive AI terminal mode with natural language interface')
+	parser.add_argument('--scope-file', action='store', type=str, help='Load scope from file for interactive mode (JSON or plain text)')
+	parser.add_argument('--initial-prompt', action='store', type=str, help='Initial prompt for interactive mode or single command execution')
+	parser.add_argument('--single-command', action='store_true', help='Execute single AI command and exit (for GitHub Actions)')
 	parser.add_argument('-v', '--verbose', action='count', help='Enable verbose output. Repeat for more verbosity.')
 	parser.add_argument('--version', action='store_true', help='Prints the AutoRecon version and exits.')
 	parser.error = lambda s: fail(s[0].upper() + s[1:])
@@ -1000,6 +1005,59 @@ async def run():
 			info('Attack plugins directory added: ' + attack_plugins_dir)
 		else:
 			warn('Attack plugins directory not found: ' + attack_plugins_dir)
+
+	# Handle AI capabilities
+	if args.enable_ai:
+		autorecon.ai_enabled = True
+		info('AI capabilities enabled using Ollama')
+		
+		# Check if interactive terminal mode is requested
+		if args.interactive_terminal:
+			try:
+				from autorecon.interactive_ai import InteractiveAI
+				
+				info('Starting AutoRecon AI Interactive Terminal Mode...')
+				interactive_ai = InteractiveAI(args.ollama_url, args.ai_model)
+				
+				# Run the interactive session
+				await interactive_ai.start_interactive_session(
+					scope_file=args.scope_file,
+					initial_prompt=args.initial_prompt
+				)
+				
+				# Exit after interactive session
+				return
+				
+			except ImportError as e:
+				error(f'Failed to import interactive AI module: {e}')
+				sys.exit(1)
+			except Exception as e:
+				error(f'Interactive AI session failed: {e}')
+				sys.exit(1)
+		
+		# Handle single command mode (for GitHub Actions)
+		elif args.single_command and args.initial_prompt:
+			try:
+				from autorecon.interactive_ai import InteractiveAI
+				
+				info(f'Executing single AI command: {args.initial_prompt}')
+				interactive_ai = InteractiveAI(args.ollama_url, args.ai_model)
+				
+				# Process single command and generate report
+				await interactive_ai.start_interactive_session(
+					scope_file=args.scope_file,
+					initial_prompt=args.initial_prompt
+				)
+				
+				# Exit after single command
+				return
+				
+			except ImportError as e:
+				error(f'Failed to import interactive AI module: {e}')
+				sys.exit(1)
+			except Exception as e:
+				error(f'Single command execution failed: {e}')
+				sys.exit(1)
 
 	plugins_dirs = [config['plugins_dir']]
 	if config['add_plugins_dir']:
@@ -1303,7 +1361,7 @@ async def run():
 				mode = 'udp'
 				port = port.split('U:')[1]
 
-			match = re.search('^([0-9]+)\-([0-9]+)$', port)
+			match = re.search(r'^([0-9]+)\-([0-9]+)$', port)
 			if match:
 				num1 = int(match.group(1))
 				num2 = int(match.group(2))
@@ -1534,7 +1592,7 @@ async def run():
 		error('AutoRecon will not run if any targets are invalid / unresolvable. To override this, re-run with the --disable-sanity-checks option.')
 		errors = True
 
-	if len(autorecon.pending_targets) == 0:
+	if len(autorecon.pending_targets) == 0 and not (args.enable_ai and (args.interactive_terminal or args.single_command)):
 		error('You must specify at least one target to scan!')
 		errors = True
 

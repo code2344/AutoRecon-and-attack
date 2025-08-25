@@ -1,0 +1,169 @@
+name: AutoRecon AI Single Command
+
+on:
+  workflow_dispatch:
+    inputs:
+      ai_prompt:
+        description: 'Natural language prompt for AI pentesting'
+        required: true
+        type: string
+        default: 'get me info on example.com'
+      scope_file_content:
+        description: 'Optional scope file content (JSON or plain text targets)'
+        required: false
+        type: string
+      ai_model:
+        description: 'AI model to use'
+        required: false
+        type: string
+        default: 'llama3.1'
+      targets:
+        description: 'Additional targets (space separated)'
+        required: false
+        type: string
+
+jobs:
+  autorecon-ai:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y curl build-essential
+    
+    - name: Install Ollama
+      run: |
+        curl -fsSL https://ollama.ai/install.sh | sh
+        
+    - name: Start Ollama service
+      run: |
+        # Start Ollama in background
+        ollama serve &
+        sleep 10
+        
+        # Pull the specified model
+        ollama pull ${{ github.event.inputs.ai_model }}
+        
+        # Verify Ollama is running
+        curl -f http://localhost:11434/api/version || exit 1
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Create scope file if provided
+      if: ${{ github.event.inputs.scope_file_content != '' }}
+      run: |
+        echo '${{ github.event.inputs.scope_file_content }}' > scope.txt
+        
+    - name: Run AutoRecon AI Single Command
+      run: |
+        # Prepare arguments
+        ARGS="--enable-ai --single-command --ai-model ${{ github.event.inputs.ai_model }}"
+        ARGS="$ARGS --initial-prompt '${{ github.event.inputs.ai_prompt }}'"
+        
+        # Add scope file if provided
+        if [ -f scope.txt ]; then
+          ARGS="$ARGS --scope-file scope.txt"
+        fi
+        
+        # Add additional targets if provided
+        if [ -n "${{ github.event.inputs.targets }}" ]; then
+          ARGS="$ARGS ${{ github.event.inputs.targets }}"
+        fi
+        
+        # Execute AutoRecon AI
+        echo "Executing: python autorecon.py $ARGS"
+        python autorecon.py $ARGS
+        
+    - name: Upload AI Reports
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: autorecon-ai-reports
+        path: |
+          autorecon_ai_reports/
+          *.json
+          *.md
+          *.txt
+        retention-days: 30
+        
+    - name: Display Report Summary
+      if: always()
+      run: |
+        echo "## AutoRecon AI Execution Summary" >> $GITHUB_STEP_SUMMARY
+        echo "**Prompt:** ${{ github.event.inputs.ai_prompt }}" >> $GITHUB_STEP_SUMMARY
+        echo "**AI Model:** ${{ github.event.inputs.ai_model }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Timestamp:** $(date)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Find and display report files
+        if [ -d "autorecon_ai_reports" ]; then
+          echo "### Generated Reports:" >> $GITHUB_STEP_SUMMARY
+          ls -la autorecon_ai_reports/ >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Display first few lines of latest report if exists
+          LATEST_REPORT=$(ls -t autorecon_ai_reports/autorecon_ai_report_*.md 2>/dev/null | head -1)
+          if [ -n "$LATEST_REPORT" ]; then
+            echo "### Report Preview:" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            head -20 "$LATEST_REPORT" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+        else
+          echo "No reports directory found" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+    - name: Comment on PR with results
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+          
+          // Read report summary
+          let reportContent = 'AutoRecon AI execution completed.\n\n';
+          reportContent += `**Prompt:** ${{ github.event.inputs.ai_prompt }}\n`;
+          reportContent += `**AI Model:** ${{ github.event.inputs.ai_model }}\n`;
+          reportContent += `**Timestamp:** ${new Date().toISOString()}\n\n`;
+          
+          // Check for reports directory
+          const reportsDir = 'autorecon_ai_reports';
+          if (fs.existsSync(reportsDir)) {
+            const files = fs.readdirSync(reportsDir);
+            reportContent += `### Generated Files:\n`;
+            files.forEach(file => {
+              reportContent += `- ${file}\n`;
+            });
+            
+            // Add preview of main report
+            const reportFiles = files.filter(f => f.startsWith('autorecon_ai_report_') && f.endsWith('.md'));
+            if (reportFiles.length > 0) {
+              const latestReport = reportFiles[reportFiles.length - 1];
+              const reportPath = path.join(reportsDir, latestReport);
+              const reportText = fs.readFileSync(reportPath, 'utf8');
+              const preview = reportText.substring(0, 1000);
+              reportContent += `\n### Report Preview:\n\`\`\`\n${preview}...\n\`\`\`\n`;
+            }
+          }
+          
+          // Post comment
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: reportContent
+          });
